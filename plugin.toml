@@ -1,0 +1,7 @@
+schema_version = 1
+name = "dcos-http"
+
+[[commands]]
+  description = "HTTP requests for your cluster!"
+  name = "http"
+  path = "bin/dcos-http"
