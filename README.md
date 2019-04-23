@@ -29,16 +29,24 @@ $ dcos plugin add -u https://github.com/bamarni/dcos-http-cli/releases/download/
 ## Usage
 
 ```console
-$ dcos http /metadata/dcos-version.json
+$ dcos http /dcos-metadata/dcos-version.json
 HTTP/1.1 200 OK
-Transfer-Encoding: chunked
+Content-Length: 193
+Accept-Ranges: bytes
 Connection: keep-alive
 Content-Type: application/json
-Date: Tue, 23 Apr 2019 15:20:41 GMT
+Date: Tue, 23 Apr 2019 15:37:33 GMT
+Etag: "5cbd73c7-c1"
+Last-Modified: Mon, 22 Apr 2019 07:56:55 GMT
 Server: openresty
 
 
-{"PUBLIC_IPV4": "18.184.78.101", "CLUSTER_ID": "52b4317e-7f45-4e8f-bbfc-5ee2e01f8efb"}
+{
+  "version": "1.13.0-alpha",
+  "dcos-image-commit": "5263b0cc09c1bf250e826cab64b902180298fa4b",
+  "bootstrap-id": "1c5b7331b17e5c21e46c85ff1486389c0de1504e",
+  "dcos-variant": "enterprise"
+}
 ```
 
 ## Development
