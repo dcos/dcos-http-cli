@@ -3,10 +3,12 @@ package login
 import (
 	"bytes"
 	"crypto/rsa"
+	"strings"
 	"unicode"
 
 	"github.com/dcos/dcos-cli/pkg/fsutil"
 	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 )
@@ -14,6 +16,7 @@ import (
 // Flags are command-line flags for a login flow.
 type Flags struct {
 	fs             afero.Fs
+	logger         *logrus.Logger
 	envLookup      func(key string) (string, bool)
 	providerID     string
 	username       string
@@ -24,10 +27,11 @@ type Flags struct {
 }
 
 // NewFlags creates flags for a login flow.
-func NewFlags(fs afero.Fs, envLookup func(key string) (string, bool)) *Flags {
+func NewFlags(fs afero.Fs, envLookup func(key string) (string, bool), logger *logrus.Logger) *Flags {
 	return &Flags{
 		fs:        fs,
 		envLookup: envLookup,
+		logger:    logger,
 	}
 }
 
@@ -37,7 +41,7 @@ func (f *Flags) Register(flags *pflag.FlagSet) {
 		&f.providerID,
 		"provider",
 		"",
-		"Specify the authentication provider to use for login.",
+		"Specify the login provider to use.",
 	)
 	flags.StringVar(
 		&f.username,
@@ -55,7 +59,7 @@ func (f *Flags) Register(flags *pflag.FlagSet) {
 		&f.passwordFile,
 		"password-file",
 		"",
-		"Specify the path to a file that contains the password (insecure).",
+		"Specify the path to a file that contains the password.",
 	)
 	flags.StringVar(
 		&f.privateKeyFile,
@@ -79,12 +83,14 @@ func (f *Flags) Resolve() error {
 	if f.username == "" {
 		if username, ok := f.envLookup("DCOS_USERNAME"); ok {
 			f.username = username
+			f.logger.Info("Read username from environment.")
 		}
 	}
 
 	if f.password == "" {
 		if password, ok := f.envLookup("DCOS_PASSWORD"); ok {
 			f.password = password
+			f.logger.Info("Read password from environment.")
 		}
 	}
 
@@ -112,6 +118,11 @@ func (f *Flags) Supports(provider *Provider) bool {
 		// The private key can't be passed interactively,
 		// if the flag is empty this provider is not supported.
 		return f.privateKey != nil
+	}
+	if strings.HasPrefix(provider.ClientMethod, "browser-") {
+		// A browser based login flow doesn't support passing a username, password, or private key
+		// from the command-line. It must be skipped implicitly in such cases.
+		return f.username == "" && f.password == "" && f.privateKey == nil
 	}
 	return f.privateKey == nil
 }

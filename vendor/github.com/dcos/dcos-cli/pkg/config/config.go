@@ -24,16 +24,14 @@ const (
 	keyPagination     = "core.pagination"
 	keyReporting      = "core.reporting"
 	keyMesosMasterURL = "core.mesos_master_url"
-	keyPrompLogin     = "core.prompt_login"
+	keyPromptLogin    = "core.prompt_login"
 	keyClusterName    = "cluster.name"
 )
 
 // Environment variables for the DC/OS configuration.
 const (
-	envURL      = "DCOS_URL"
-	envACSToken = "DCOS_ACS_TOKEN"
-	envTLS      = "DCOS_SSL_VERIFY"
-	envTimeout  = "DCOS_TIMEOUT"
+	envTLS     = "DCOS_SSL_VERIFY"
+	envTimeout = "DCOS_TIMEOUT"
 )
 
 // Errors related to the Config.
@@ -70,10 +68,8 @@ type Config struct {
 func New(opts Opts) *Config {
 	if opts.EnvWhitelist == nil {
 		opts.EnvWhitelist = map[string]string{
-			keyURL:      envURL,
-			keyACSToken: envACSToken,
-			keyTLS:      envTLS,
-			keyTimeout:  envTimeout,
+			keyTLS:     envTLS,
+			keyTimeout: envTimeout,
 		}
 	}
 
@@ -166,21 +162,35 @@ func (c *Config) Get(key string) interface{} {
 }
 
 // Set sets a key in the store.
-func (c *Config) Set(key string, val interface{}) {
+func (c *Config) Set(key string, val interface{}) (err error) {
 	switch key {
+	case keyURL:
+		// Make sure the ACS token is unset whenever the DC/OS URL is updated.
+		c.Unset(keyACSToken)
 	case keyTimeout:
 		// go-toml requires int64
-		val = cast.ToInt64(val)
-	case keyPagination, keyReporting, keyPrompLogin:
-		val = cast.ToBool(val)
+		val, err = cast.ToInt64E(val)
+	case keyTLS:
+		if _, err = cast.ToBoolE(val); err != nil {
+			_, err = c.fs.Stat(cast.ToString(val))
+		}
+	case keyPagination, keyReporting, keyPromptLogin:
+		val, err = cast.ToBoolE(val)
 	default:
-		val = cast.ToString(val)
+		val, err = cast.ToStringE(val)
 	}
-	c.tree.Set(key, val)
+	if err == nil {
+		c.tree.Set(key, val)
+	}
+	return err
 }
 
 // Unset deletes a given key from the Config.
 func (c *Config) Unset(key string) {
+	if key == keyURL {
+		// Unset the ACS token as well when removing the DC/OS URL.
+		c.Unset(keyACSToken)
+	}
 	keys := strings.Split(key, ".")
 
 	treeMap := c.tree.ToMap()

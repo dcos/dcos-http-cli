@@ -2,8 +2,10 @@ package cli
 
 import (
 	"crypto/tls"
+	"errors"
+	"fmt"
 	"io"
-	"os/user"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,6 +18,7 @@ import (
 	"github.com/dcos/dcos-cli/pkg/plugin"
 	"github.com/dcos/dcos-cli/pkg/prompt"
 	"github.com/dcos/dcos-cli/pkg/setup"
+	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 )
@@ -58,11 +61,6 @@ func (ctx *Context) EnvLookup(key string) (string, bool) {
 	return ctx.env.EnvLookup(key)
 }
 
-// User returns the current system user.
-func (ctx *Context) User() (*user.User, error) {
-	return ctx.env.UserLookup()
-}
-
 // Fs returns the filesystem.
 func (ctx *Context) Fs() afero.Fs {
 	return ctx.env.Fs
@@ -84,42 +82,58 @@ func (ctx *Context) Logger() *logrus.Logger {
 }
 
 // PluginManager returns a plugin manager.
-func (ctx *Context) PluginManager(dir string) *plugin.Manager {
-	return &plugin.Manager{
-		Fs:     ctx.Fs(),
-		Logger: ctx.Logger(),
-		Dir:    dir,
+func (ctx *Context) PluginManager(cluster *config.Cluster) *plugin.Manager {
+	pluginManager := plugin.NewManager(ctx.Fs(), ctx.Logger())
+	if cluster != nil {
+		pluginManager.SetCluster(cluster)
 	}
-
+	return pluginManager
 }
 
 // DCOSDir returns the root directory for the DC/OS CLI.
 // It defaults to `~/.dcos` and can be overriden by the `DCOS_DIR` env var.
-func (ctx *Context) DCOSDir() string {
-	if dcosDir, ok := ctx.env.EnvLookup("DCOS_DIR"); ok {
-		return dcosDir
-	}
-	if usr, err := ctx.env.UserLookup(); err == nil {
-		return filepath.Join(usr.HomeDir, ".dcos")
+func (ctx *Context) DCOSDir() (string, error) {
+	if dcosDir, ok := ctx.env.EnvLookup(EnvDCOSDir); ok {
+		// Make sure DCOS_DIR is an absolute path, otherwise this causes issues with plugin invocation.
+		// See https://jira.mesosphere.com/browse/DCOS_OSS-4405
+		if !filepath.IsAbs(dcosDir) {
+			currentDir, err := os.Getwd()
+			if err != nil {
+				return "", err
+			}
+			dcosDir = filepath.Join(currentDir, dcosDir)
+		}
+		return dcosDir, nil
 	}
 
-	// Not being able to get the current user is not critical. While it is
-	// very unlikely to happen, we can fallback to the current directory.
-	return ""
+	// We use github.com/mitchellh/go-homedir as os/user doesn't work well with cross-compilation.
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, ".dcos"), nil
 }
 
 // ConfigManager returns the ConfigManager for the context.
-func (ctx *Context) ConfigManager() *config.Manager {
+func (ctx *Context) ConfigManager() (*config.Manager, error) {
+	dcosDir, err := ctx.DCOSDir()
+	if err != nil {
+		return nil, err
+	}
 	return config.NewManager(config.ManagerOpts{
 		Fs:        ctx.env.Fs,
 		EnvLookup: ctx.env.EnvLookup,
-		Dir:       ctx.DCOSDir(),
-	})
+		Dir:       dcosDir,
+	}), nil
 }
 
 // Cluster returns the current cluster.
 func (ctx *Context) Cluster() (*config.Cluster, error) {
-	conf, err := ctx.ConfigManager().Current()
+	configManager, err := ctx.ConfigManager()
+	if err != nil {
+		return nil, err
+	}
+	conf, err := configManager.Current()
 	if err != nil {
 		return nil, err
 	}
@@ -127,14 +141,16 @@ func (ctx *Context) Cluster() (*config.Cluster, error) {
 }
 
 // Clusters returns the clusters.
-func (ctx *Context) Clusters() []*config.Cluster {
-	confs := ctx.ConfigManager().All()
+func (ctx *Context) Clusters() ([]*config.Cluster, error) {
+	configManager, err := ctx.ConfigManager()
+	if err != nil {
+		return nil, err
+	}
 	var clusters []*config.Cluster
-	for _, conf := range confs {
+	for _, conf := range configManager.All() {
 		clusters = append(clusters, config.NewCluster(conf))
 	}
-
-	return clusters
+	return clusters, nil
 }
 
 // HTTPClient creates an httpclient.Client for a given cluster.
@@ -174,19 +190,28 @@ func (ctx *Context) Login(flags *login.Flags, httpClient *httpclient.Client) (st
 }
 
 // Setup configures a given cluster based on its URL and setup flags.
-func (ctx *Context) Setup(flags *setup.Flags, clusterURL string) (*config.Cluster, error) {
+func (ctx *Context) Setup(flags *setup.Flags, clusterURL string, attach bool) (*config.Cluster, error) {
+	configManager, err := ctx.ConfigManager()
+	if err != nil {
+		return nil, err
+	}
+
 	if !strings.HasPrefix(clusterURL, "https://") && !strings.HasPrefix(clusterURL, "http://") {
 		ctx.Logger().Info("Missing scheme in cluster URL, assuming HTTPS.")
 		clusterURL = "https://" + clusterURL
 	}
 
 	return setup.New(setup.Opts{
+		Fs:            ctx.Fs(),
 		Errout:        ctx.ErrOut(),
+		EnvLookup:     ctx.EnvLookup,
 		Prompt:        ctx.Prompt(),
 		Logger:        ctx.Logger(),
 		LoginFlow:     ctx.loginFlow(),
-		ConfigManager: ctx.ConfigManager(),
-	}).Configure(flags, clusterURL)
+		ConfigManager: configManager,
+		PluginManager: ctx.PluginManager(nil),
+		Deprecated:    ctx.Deprecated,
+	}).Configure(flags, clusterURL, attach)
 }
 
 func (ctx *Context) loginFlow() *login.Flow {
@@ -196,4 +221,14 @@ func (ctx *Context) loginFlow() *login.Flow {
 		Logger: ctx.Logger(),
 		Opener: ctx.Opener(),
 	})
+}
+
+// Deprecated warns that a feature is deprecated.
+// It returns an error when DCOS_CLI_STRICT_DEPRECATIONS=1.
+func (ctx *Context) Deprecated(msg string) error {
+	fmt.Fprintln(ctx.ErrOut(), msg)
+	if _, ok := ctx.env.EnvLookup(EnvStrictDeprecations); ok {
+		return errors.New("usage of deprecated feature")
+	}
+	return nil
 }

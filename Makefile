@@ -3,14 +3,15 @@ default:
 	@make $(shell uname | tr [A-Z] [a-z])
 
 .PHONY: zip
-zip: darwin linux
+zip: darwin linux windows
 	mkdir -p build/releases
 	(cd build/linux; zip -r ../releases/dcos-http-cli.linux.zip .)
 	(cd build/darwin; zip -r ../releases/dcos-http-cli.darwin.zip .)
+	(cd build/windows; zip -r ../releases/dcos-http-cli.windows.zip .)
 
-.PHONY: darwin linux
-darwin linux:
-	GOOS=$(@) go build -o build/$(@)/bin/dcos-http ./main.go
+.PHONY: darwin linux windows
+darwin linux windows:
+	GOOS=$(@) go build -o build/$(@)/bin/dcos-http ./cmd/dcos-http
 	cp plugin.toml build/$(@)/
 
 .PHONY: vet
