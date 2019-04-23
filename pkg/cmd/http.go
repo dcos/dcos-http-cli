@@ -18,7 +18,7 @@ func NewHTTPCommand() *cobra.Command {
 	var method, data string
 
 	cmd := &cobra.Command{
-		Use:   "http",
+		Use:   "http <path>",
 		Short: "Make HTTP requests against your cluster",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			cmd.SilenceUsage = true
