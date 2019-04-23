@@ -2,6 +2,7 @@ package setup
 
 import (
 	"github.com/dcos/dcos-cli/pkg/login"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 )
@@ -18,10 +19,10 @@ type Flags struct {
 }
 
 // NewFlags creates flags for a cluster setup.
-func NewFlags(fs afero.Fs, envLookup func(key string) (string, bool)) *Flags {
+func NewFlags(fs afero.Fs, envLookup func(key string) (string, bool), logger *logrus.Logger) *Flags {
 	return &Flags{
 		fs:         fs,
-		loginFlags: login.NewFlags(fs, envLookup),
+		loginFlags: login.NewFlags(fs, envLookup, logger),
 	}
 }
 
@@ -62,6 +63,9 @@ func (f *Flags) Resolve() error {
 			return err
 		}
 		f.caBundle = caBundle
+
+		// Don't prompt for fingerprint confirmation when a CA is explicitly passed.
+		f.noCheck = true
 	}
 	return f.loginFlags.Resolve()
 }

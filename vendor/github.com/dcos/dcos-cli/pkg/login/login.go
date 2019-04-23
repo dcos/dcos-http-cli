@@ -3,16 +3,24 @@ package login
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/dcos/dcos-cli/pkg/dcos"
 	"github.com/dcos/dcos-cli/pkg/httpclient"
 	"github.com/sirupsen/logrus"
 )
 
+var (
+	// ErrAuthDisabled is the error returned when attempting to get authentication providers
+	// from a cluster without authentication.
+	ErrAuthDisabled = errors.New("authentication disabled")
+)
+
 // Credentials is the payload for login POST requests.
 type Credentials struct {
-	UID      string `json:"uid"`
+	UID      string `json:"uid,omitempty"`
 	Password string `json:"password,omitempty"`
 	Token    string `json:"token,omitempty"`
 }
@@ -38,6 +46,11 @@ func NewClient(baseClient *httpclient.Client, logger *logrus.Logger) *Client {
 
 // Providers returns the supported login providers for a given DC/OS cluster.
 func (c *Client) Providers() (Providers, error) {
+	authHeader, err := c.challengeAuth()
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := c.http.Get("/acs/api/v1/auth/providers")
 	if err != nil {
 		return nil, err
@@ -50,17 +63,17 @@ func (c *Client) Providers() (Providers, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		if authHeader == "oauthjwt" {
+			// DC/OS Open Source >= 1.13.
+			provider := defaultOIDCImplicitFlowProvider()
+			providers[provider.ID] = provider
+		}
 		return providers, nil
 	}
 
+	// This is for DC/OS EE 1.7/1.8 and DC/OS Open Source < 1.13.
 	c.logger.Info("Falling back to the WWW-Authenticate challenge.")
-
-	// This is for DC/OS EE 1.7/1.8 and DC/OS Open Source.
-	authHeader, err := c.challengeAuth()
-	if err != nil {
-		return nil, err
-	}
-
 	switch authHeader {
 	case "oauthjwt":
 		// DC/OS Open Source
@@ -81,22 +94,38 @@ func (c *Client) Providers() (Providers, error) {
 // This method is used to determine which login provider is available when the /acs/api/v1/auth/providers
 // endpoint is not present.
 func (c *Client) challengeAuth() (string, error) {
-	req, err := c.http.NewRequest("HEAD", "/pkgpanda/active.buildinfo.full.json", nil)
+	resp, err := c.sniffAuth("")
 	if err != nil {
 		return "", err
 	}
-	req.Header.Del("Authorization")
 
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return "", err
-	}
-	resp.Body.Close()
-
-	if resp.StatusCode != 401 {
+	switch resp.StatusCode {
+	case 200:
+		return "", ErrAuthDisabled
+	case 401:
+		return resp.Header.Get("WWW-Authenticate"), nil
+	default:
 		return "", fmt.Errorf("expected status code 401, got %d", resp.StatusCode)
 	}
-	return resp.Header.Get("WWW-Authenticate"), nil
+}
+
+// sniffAuth sends an HTTP request with a given ACS token to a well-known resource.
+// It is mainly used to challenge auth or verify that an ACS token is valid.
+func (c *Client) sniffAuth(acsToken string) (*http.Response, error) {
+	var opts []httpclient.Option
+	if acsToken != "" {
+		opts = append(opts, httpclient.ACSToken(acsToken))
+	}
+	req, err := c.http.NewRequest("HEAD", "/pkgpanda/active.buildinfo.full.json", nil, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if acsToken == "" {
+		// When an empty ACS token is passed, we're challenging auth.
+		// Make sure the Authorization header is empty.
+		delete(req.Header, "Authorization")
+	}
+	return c.http.Do(req)
 }
 
 // Login makes a POST requests to the login endpoint with the given credentials.

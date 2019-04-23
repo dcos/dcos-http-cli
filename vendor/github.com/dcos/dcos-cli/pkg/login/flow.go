@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/dcos/dcos-cli/pkg/httpclient"
@@ -84,6 +86,8 @@ func (f *Flow) Start(flags *Flags, httpClient *httpclient.Client) (string, error
 func (f *Flow) selectProvider(providers Providers) (*Provider, error) {
 	// Explicit provider selection.
 	if f.flags.providerID != "" {
+		// TODO: If a provider ID, a username, and a password are given
+		// we should return an error. This might break some use cases.
 		provider, ok := providers[f.flags.providerID]
 		if ok {
 			return provider, nil
@@ -94,6 +98,13 @@ func (f *Flow) selectProvider(providers Providers) (*Provider, error) {
 	// Extract login provider candidates for implicit or manual selection.
 	var providerCandidates []*Provider
 	for _, provider := range providers.Slice() {
+		// If both username and password are passed, we default to dcos-uid-password.
+		// The provider does not matter in the actual request we do to the cluster,
+		// the IAM might delegate the credential validation to a directory backend via LDAP.
+		if provider.Type == DCOSUIDPassword && f.flags.username != "" && f.flags.password != "" {
+			return provider, nil
+		}
+
 		if f.flags.Supports(provider) {
 			providerCandidates = append(providerCandidates, provider)
 		} else {
@@ -118,45 +129,67 @@ func (f *Flow) selectProvider(providers Providers) (*Provider, error) {
 }
 
 // TriggerMethod initiates the client login method of a given provider.
-func (f *Flow) triggerMethod(provider *Provider) (string, error) {
-	var loginEndpoint string
-	credentials := &Credentials{}
-
+func (f *Flow) triggerMethod(provider *Provider) (acsToken string, err error) {
 	for attempt := 1; ; attempt++ {
 		switch provider.ClientMethod {
 
 		// Read UID and password from command-line flags or prompt for them.
 		case methodCredential, methodUserCredential:
-			loginEndpoint = provider.Config.StartFlowURL
-			credentials.UID = f.uid()
-			credentials.Password = f.password()
+			acsToken, err = f.client.Login(provider.Config.StartFlowURL, &Credentials{
+				UID:      f.uid(),
+				Password: f.password(),
+			})
 
 		// Read UID from the command-line flags and generate a service login
 		// token from the --private-key. The token has a 5 minutes lifetime.
 		case methodServiceCredential:
-			credentials.UID = f.uid()
-			token, err := f.serviceToken(credentials.UID)
+			uid := f.uid()
+			token, err := f.serviceToken(uid)
 			if err != nil {
 				return "", err
 			}
-			credentials.Token = token
+			acsToken, err = f.client.Login("", &Credentials{UID: uid, Token: token})
 
 		// Open the browser at the `start_flow_url` location specified in the provider config.
 		// The user is then expected to continue the flow in the browser and copy paste the
-		// login token from the browser to their terminal.
-		case methodBrowserToken:
+		// token from the browser to their terminal.
+		case methodBrowserAuthToken, methodBrowserOIDCToken:
 			if attempt == 1 {
 				if err := f.openBrowser(provider.Config.StartFlowURL); err != nil {
 					return "", err
 				}
 			}
 			f.interactive = true
-			credentials.Token = f.prompt.Input("Enter token from the browser: ")
+			token := f.prompt.Input("Enter token from the browser: ")
+
+			// methodBrowserOIDCToken relies on a login token,
+			// it must be sent in order to get an ACS token back.
+			if provider.ClientMethod == methodBrowserOIDCToken {
+				acsToken, err = f.client.Login("", &Credentials{Token: token})
+				break
+			}
+
+			// With methodBrowserAuthToken, the user is passing the authentication token from the browser
+			// to the terminal directly. Send a HEAD request with an appropriate Authorization header to a
+			// well-known path in order to verify the authentication token.
+			var resp *http.Response
+			resp, err = f.client.sniffAuth(token)
+			if err != nil {
+				return "", err
+			}
+			switch resp.StatusCode {
+			case 200, 403:
+				acsToken = token
+			case 401:
+				err = errors.New("invalid auth token")
+			default:
+				return "", fmt.Errorf("unexpected status code %d", resp.StatusCode)
+			}
 		}
-
-		acsToken, err := f.client.Login(loginEndpoint, credentials)
-
 		// In case of failure, let the user re-enter credentials 2 times.
+		if err != nil {
+			f.logger.Errorf("Error: %s", err)
+		}
 		if err == nil || !f.interactive || attempt >= 3 {
 			return acsToken, err
 		}
@@ -189,18 +222,20 @@ func (f *Flow) serviceToken(uid string) (string, error) {
 	}).SignedString(f.flags.privateKey)
 }
 
-// openBrowser opens the browser at a given cluster path.
-func (f *Flow) openBrowser(clusterPath string) error {
-	req, err := f.client.http.NewRequest("GET", clusterPath, nil)
-	if err != nil {
-		return err
+// openBrowser opens the browser at a given start flow URL.
+func (f *Flow) openBrowser(startFlowURL string) error {
+	// The start flow URL might be a relative or absolute URL.
+	if strings.HasPrefix(startFlowURL, "/") {
+		req, err := f.client.http.NewRequest("GET", startFlowURL, nil)
+		if err != nil {
+			return err
+		}
+		startFlowURL = req.URL.String()
 	}
-
-	urlToOpen := req.URL.String()
-	if err := f.opener.Open(urlToOpen); err != nil {
+	if err := f.opener.Open(startFlowURL); err != nil {
 		f.logger.Error(err)
 	}
 	msg := "If your browser didn't open, please follow this link:\n\n    %s\n\n"
-	fmt.Fprintf(f.errout, msg, urlToOpen)
+	fmt.Fprintf(f.errout, msg, startFlowURL)
 	return nil
 }
