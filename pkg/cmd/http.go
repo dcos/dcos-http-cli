@@ -23,8 +23,10 @@ func NewHTTPCommand() *cobra.Command {
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			cmd.SilenceUsage = true
 		},
-		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
 			httpClient := pluginutil.HTTPClient("")
 
 			var httpOptions []httpclient.Option

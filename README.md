@@ -49,9 +49,25 @@ Server: openresty
 }
 ```
 
+Run `dcos http` for command usage information.
+
 ## Development
 
 This project also acts as a reference implementation for CLI plugin developers.
 
 It follows the [DC/OS CLI guidelines](https://github.com/dcos/dcos-cli/blob/master/design/style.md)
 and provides [autocompletion support](https://github.com/dcos/dcos-cli/blob/master/design/plugin.md#add-autocompletion-to-a-plugin).
+
+
+### Running the plugin
+
+In order to run the plugin from sources, you must first have the DC/OS CLI installed and attached to a cluster.
+
+Then you can build the plugin and add it to your CLI:
+
+```console
+$ make zip
+$ dcos plugin add -u ./build/releases/dcos-http-cli.darwin.zip
+```
+
+It can now be invoked through `dcos http [...]`
