@@ -11,19 +11,19 @@ the plugin can be installed through the [dcos plugin add](https://docs.mesospher
 ### macOS
 
 ```console
-$ dcos plugin add -u https://github.com/bamarni/dcos-http-cli/releases/download/0.1.0/dcos-http-cli.darwin.zip
+$ dcos plugin add -u https://github.com/dcos/dcos-http-cli/releases/download/0.1.0/dcos-http-cli.darwin.zip
 ```
 
 ### Linux
 
 ```console
-$ dcos plugin add -u https://github.com/bamarni/dcos-http-cli/releases/download/0.1.0/dcos-http-cli.linux.zip
+$ dcos plugin add -u https://github.com/dcos/dcos-http-cli/releases/download/0.1.0/dcos-http-cli.linux.zip
 ```
 
 ### Windows
 
 ```console
-$ dcos plugin add -u https://github.com/bamarni/dcos-http-cli/releases/download/0.1.0/dcos-http-cli.windows.zip
+$ dcos plugin add -u https://github.com/dcos/dcos-http-cli/releases/download/0.1.0/dcos-http-cli.windows.zip
 ```
 
 ## Usage
