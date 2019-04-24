@@ -13,6 +13,8 @@ zip: darwin linux windows
 darwin linux windows:
 	GOOS=$(@) go build -o build/$(@)/bin/dcos-http ./cmd/dcos-http
 	cp plugin.toml build/$(@)/
+	mkdir -p build/$(@)/completion/bash/
+	cp http.sh build/$(@)/completion/bash
 
 .PHONY: vet
 vet: lint
