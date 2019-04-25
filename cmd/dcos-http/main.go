@@ -5,7 +5,7 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/bamarni/dcos-http-cli/pkg/cmd"
+	"github.com/dcos/dcos-http-cli/pkg/cmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
