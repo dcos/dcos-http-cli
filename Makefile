@@ -2,12 +2,10 @@ PLATFORM?=$(shell uname | tr [A-Z] [a-z])
 export GO111MODULE = on
 
 .PHONY: default
-default:
-	@make $(PLATFORM)
+default: $(PLATFORM)
 
 .PHONY: install
-install:
-	@make plugin
+install: plugin
 	dcos plugin add -u ./build/plugins/dcos-http-cli.$(PLATFORM).zip
 
 .PHONY: plugin
