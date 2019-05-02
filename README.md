@@ -66,8 +66,7 @@ In order to run the plugin from sources, you must first have the DC/OS CLI insta
 Then you can build the plugin and add it to your CLI:
 
 ```console
-$ make zip
-$ dcos plugin add -u ./build/releases/dcos-http-cli.darwin.zip
+$ make install
 ```
 
 It can now be invoked through `dcos http [...]`
