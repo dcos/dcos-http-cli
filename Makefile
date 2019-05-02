@@ -1,13 +1,19 @@
+PLATFORM?=$(shell uname | tr [A-Z] [a-z])
+export GO111MODULE = on
+
 .PHONY: default
 default:
-	@make $(shell uname | tr [A-Z] [a-z])
+	@make $(PLATFORM)
 
-.PHONY: zip
-zip: darwin linux windows
-	mkdir -p build/releases
-	(cd build/linux; zip -r ../releases/dcos-http-cli.linux.zip .)
-	(cd build/darwin; zip -r ../releases/dcos-http-cli.darwin.zip .)
-	(cd build/windows; zip -r ../releases/dcos-http-cli.windows.zip .)
+.PHONY: install
+install:
+	@make plugin
+	dcos plugin add -u ./build/plugins/dcos-http-cli.$(PLATFORM).zip
+
+.PHONY: plugin
+plugin: $(PLATFORM)
+	mkdir -p build/plugins
+	(cd build/$(PLATFORM); zip -r ../plugins/dcos-http-cli.$(PLATFORM).zip .)
 
 .PHONY: darwin linux windows
 darwin linux windows:
