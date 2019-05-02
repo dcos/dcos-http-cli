@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"strings"
 
 	"github.com/dcos/dcos-cli/pkg/httpclient"
 	"github.com/dcos/dcos-core-cli/pkg/pluginutil"
@@ -16,6 +17,7 @@ import (
 // NewHTTPCommand creates the `http` command with all the available subcommands.
 func NewHTTPCommand() *cobra.Command {
 	var method, data string
+	var headers []string
 
 	cmd := &cobra.Command{
 		Use:   "http <path>",
@@ -39,7 +41,16 @@ func NewHTTPCommand() *cobra.Command {
 				}
 			}
 
-			req, err := httpClient.NewRequest(method, args[0], bytes.NewBufferString(data))
+			for _, header := range headers {
+				headerParts := strings.SplitN(header, ":", 2)
+				if len(headerParts) < 2 {
+					return fmt.Errorf("invalid header '%s'", header)
+				}
+				key, value := headerParts[0], strings.TrimSpace(headerParts[1])
+				httpOptions = append(httpOptions, httpclient.Header(key, value))
+			}
+
+			req, err := httpClient.NewRequest(method, args[0], bytes.NewBufferString(data), httpOptions...)
 			if err != nil {
 				return err
 			}
@@ -54,8 +65,9 @@ func NewHTTPCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&method, "request", "X", "GET", "Specify request command to use")
 	cmd.Flags().StringVarP(&data, "data", "d", "", "HTTP POST data")
+	cmd.Flags().StringVarP(&method, "request", "X", "GET", "Specify request command to use")
+	cmd.Flags().StringSliceVarP(&headers, "header", "H", nil, "Pass custom header(s) to server")
 
 	return cmd
 }
