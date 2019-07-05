@@ -18,6 +18,7 @@ import (
 func NewHTTPCommand() *cobra.Command {
 	var method, data string
 	var headers []string
+	var suppressHeaders bool
 
 	cmd := &cobra.Command{
 		Use:   "http <path>",
@@ -61,10 +62,11 @@ func NewHTTPCommand() *cobra.Command {
 			}
 			defer resp.Body.Close()
 
-			return dumpResponse(resp)
+			return dumpResponse(resp, suppressHeaders)
 		},
 	}
 
+	cmd.Flags().BoolVarP(&suppressHeaders, "suppress-headers", "s", false, "Suppress response headers in output")
 	cmd.Flags().StringVarP(&data, "data", "d", "", "HTTP POST data")
 	cmd.Flags().StringVarP(&method, "request", "X", "GET", "Specify request command to use")
 	cmd.Flags().StringSliceVarP(&headers, "header", "H", nil, "Pass custom header(s) to server")
@@ -72,12 +74,14 @@ func NewHTTPCommand() *cobra.Command {
 	return cmd
 }
 
-func dumpResponse(resp *http.Response) error {
-	respDump, err := httputil.DumpResponse(resp, false)
-	if err != nil {
-		return err
+func dumpResponse(resp *http.Response, suppressHeaders bool) error {
+	if !suppressHeaders {
+		respDump, err := httputil.DumpResponse(resp, false)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(respDump))
 	}
-	fmt.Println(string(respDump))
-	_, err = io.Copy(os.Stdout, resp.Body)
+	_, err := io.Copy(os.Stdout, resp.Body)
 	return err
 }
