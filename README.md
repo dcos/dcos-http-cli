@@ -30,17 +30,6 @@ $ dcos plugin add -u https://github.com/dcos/dcos-http-cli/releases/download/0.1
 
 ```console
 $ dcos http /dcos-metadata/dcos-version.json
-HTTP/1.1 200 OK
-Content-Length: 193
-Accept-Ranges: bytes
-Connection: keep-alive
-Content-Type: application/json
-Date: Tue, 23 Apr 2019 15:37:33 GMT
-Etag: "5cbd73c7-c1"
-Last-Modified: Mon, 22 Apr 2019 07:56:55 GMT
-Server: openresty
-
-
 {
   "version": "1.13.0-alpha",
   "dcos-image-commit": "5263b0cc09c1bf250e826cab64b902180298fa4b",
