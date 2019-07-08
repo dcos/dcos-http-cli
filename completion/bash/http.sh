@@ -3,6 +3,8 @@
 _dcos_http() {
     local flags=(
     "--data"
+    "--header"
+    "--include"
     "--request="
     )
 
