@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dcos/dcos-cli/constants"
 	"github.com/dcos/dcos-cli/pkg/cli/version"
 	"github.com/sirupsen/logrus"
 )
@@ -45,6 +46,16 @@ type Options struct {
 
 // ctxKey is a custom type to set values in request contexts.
 type ctxKey int
+
+// HTTPError represents an HTTP error, it is returned when FailOnErrStatus is enabled.
+type HTTPError struct {
+	Response *http.Response
+}
+
+// Error returns the error message.
+func (err *HTTPError) Error() string {
+	return fmt.Sprintf("HTTP %d error", err.Response.StatusCode)
+}
 
 // ctxKeyFailOnErrStatus is a request context key which, when sets, indicates that
 // the HTTP client should return in error when it encounters an HTTP error (4XX / 5XX).
@@ -108,28 +119,32 @@ func New(baseURL string, opts ...Option) *Client {
 		// Default request timeout to 3 minutes. We don't use http.Client.Timeout on purpose as the
 		// current approach allows to change the timeout on a per-request basis. The same client can
 		// be shared for requests with different timeouts.
-		Timeout: 3 * time.Minute,
+		Timeout: constants.HTTPTimeout,
 	}
 
 	for _, opt := range opts {
 		opt(&options)
 	}
 
+	dialTimeout := constants.DialTimeout
+	if options.Timeout == 0 {
+		dialTimeout = 0
+	}
+
 	return &Client{
 		baseURL: baseURL,
 		baseClient: &http.Client{
 			Transport: &http.Transport{
-
 				// Allow http_proxy, https_proxy, and no_proxy.
 				Proxy: http.ProxyFromEnvironment,
 
 				// Set a 10 seconds timeout for the connection to be established.
 				DialContext: (&net.Dialer{
-					Timeout: 10 * time.Second,
+					Timeout: dialTimeout,
 				}).DialContext,
 
 				// Set it to 10 seconds as well for the TLS handshake when using HTTPS.
-				TLSHandshakeTimeout: 10 * time.Second,
+				TLSHandshakeTimeout: dialTimeout,
 
 				// The client will be dealing with a single host (the one in baseURL),
 				// set max idle connections to 30 regardless of the host.
@@ -159,6 +174,16 @@ func (c *Client) Get(path string, opts ...Option) (*http.Response, error) {
 // Post issues a POST to the specified DC/OS cluster path.
 func (c *Client) Post(path string, contentType string, body io.Reader, opts ...Option) (*http.Response, error) {
 	req, err := c.NewRequest("POST", path, body, opts...)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	return c.Do(req)
+}
+
+// Put issues a PUT to the specified DC/OS cluster path.
+func (c *Client) Put(path string, contentType string, body io.Reader, opts ...Option) (*http.Response, error) {
+	req, err := c.NewRequest("PUT", path, body, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +276,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		_, failOnErrStatus := req.Context().Value(ctxKeyFailOnErrStatus).(struct{})
 
 		if failOnErrStatus && resp.StatusCode >= 400 && resp.StatusCode < 600 {
-			return nil, fmt.Errorf("HTTP %d error", resp.StatusCode)
+			return nil, &HTTPError{Response: resp}
 		}
 	}
 	return resp, err

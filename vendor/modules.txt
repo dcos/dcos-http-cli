@@ -1,18 +1,44 @@
-# github.com/dcos/dcos-cli v0.0.0-20190423122132-2ce1dd45324d
+# github.com/antihax/optional v1.0.0
+github.com/antihax/optional
+# github.com/dcos/client-go v0.0.0-20191018070906-84d627162e19
+github.com/dcos/client-go/dcos
+# github.com/dcos/dcos-cli v0.0.0-20191018191651-51eee402180b
 github.com/dcos/dcos-cli/pkg/httpclient
-github.com/dcos/dcos-cli/pkg/cli/version
 github.com/dcos/dcos-cli/pkg/log
-# github.com/dcos/dcos-core-cli v0.0.0-20190423112701-825211a38a0f
+github.com/dcos/dcos-cli/constants
+github.com/dcos/dcos-cli/pkg/cli/version
+# github.com/dcos/dcos-core-cli v0.0.0-20191018104139-bc6084307405
 github.com/dcos/dcos-core-cli/pkg/pluginutil
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/sirupsen/logrus v1.4.1
+# github.com/mitchellh/go-homedir v1.1.0
+github.com/mitchellh/go-homedir
+# github.com/pelletier/go-toml v1.5.0
+github.com/pelletier/go-toml
+# github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
-# github.com/spf13/cobra v0.0.3
+# github.com/spf13/afero v1.2.2
+github.com/spf13/afero
+github.com/spf13/afero/mem
+# github.com/spf13/cast v1.3.0
+github.com/spf13/cast
+# github.com/spf13/cobra v0.0.5
 github.com/spf13/cobra
-# github.com/spf13/pflag v1.0.1
+# github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
-# golang.org/x/sys v0.0.0-20190416152802-12500544f89f
+# golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+golang.org/x/crypto/ed25519
+golang.org/x/crypto/pbkdf2
+golang.org/x/crypto/ed25519/internal/edwards25519
+# golang.org/x/sys v0.0.0-20191020212454-3e7259c5e7c2
 golang.org/x/sys/unix
+# golang.org/x/text v0.3.2
+golang.org/x/text/transform
+golang.org/x/text/unicode/norm
+# gopkg.in/square/go-jose.v2 v2.3.1
+gopkg.in/square/go-jose.v2
+gopkg.in/square/go-jose.v2/jwt
+gopkg.in/square/go-jose.v2/cipher
+gopkg.in/square/go-jose.v2/json
