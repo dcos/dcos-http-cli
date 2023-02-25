@@ -10,5 +10,5 @@ require (
 	github.com/pelletier/go-toml v1.5.0 // indirect
 	github.com/spf13/cobra v0.0.5
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
-	golang.org/x/sys v0.0.0-20191020212454-3e7259c5e7c2 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 )
